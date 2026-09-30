@@ -17,8 +17,8 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 const W = cv.width, H = cv.height;
 
-const GRAVITY = 0.45, FLAP = -7.5, SPEED = 2.4;
-const GAP = 160, PIPE_W = 60, PIPE_EVERY = 210;
+const GRAVITY = 0.32, FLAP = -5.6, MAX_FALL = 7, SPEED = 2.2;
+const GAP = 210, PIPE_W = 60, PIPE_EVERY = 270, MAX_SHIFT = 130;
 const CAT_W = 44, CAT_H = 32, CAT_X = 90;
 const RAINBOW = ['#f00', '#f90', '#ff0', '#3f0', '#09f', '#63f'];
 
@@ -72,20 +72,24 @@ function update() {
   if (state === 'ready') { cat.y = H / 2 + Math.sin(frame / 15) * 8; return; }
   if (state === 'dead') { return; }
 
-  cat.vy += GRAVITY;
+  cat.vy = Math.min(cat.vy + GRAVITY, MAX_FALL);
   cat.y += cat.vy;
 
   trail.unshift(cat.y);
   if (trail.length > 30) trail.pop();
 
-  if (frame % Math.round(PIPE_EVERY / SPEED) === 1 || pipes.length === 0) {
-    const top = 70 + Math.random() * (H - GAP - 140);
-    pipes.push({ x: W, top, scored: false });
+  const last = pipes[pipes.length - 1];
+  if (!last || last.x <= W - PIPE_EVERY) {
+    // keep each gap reachable from the previous one
+    const lo = 60, hi = H - GAP - 60;
+    const prev = last ? last.top : (lo + hi) / 2;
+    const top = Math.max(lo, Math.min(hi, prev + (Math.random() * 2 - 1) * MAX_SHIFT));
+    pipes.push({ x: last ? last.x + PIPE_EVERY : W + 60, top, scored: false });
   }
   pipes.forEach(p => p.x -= SPEED);
   pipes = pipes.filter(p => p.x > -PIPE_W);
 
-  const bx = CAT_X + 4, by = cat.y - CAT_H / 2 + 4, bw = CAT_W - 8, bh = CAT_H - 8;
+  const bx = CAT_X + 8, by = cat.y - CAT_H / 2 + 8, bw = CAT_W - 16, bh = CAT_H - 14;
   for (const p of pipes) {
     if (bx + bw > p.x && bx < p.x + PIPE_W && (by < p.top || by + bh > p.top + GAP)) die();
     if (!p.scored && p.x + PIPE_W < CAT_X) { p.scored = true; score++; beep(880, 0.08); }
@@ -192,13 +196,22 @@ function draw() {
   }
 }
 
-function loop() { update(); draw(); requestAnimationFrame(loop); }
+// fixed 60 updates/sec regardless of monitor refresh rate
+let last = 0, acc = 0;
+const STEP = 1000 / 60;
+function loop(t) {
+  acc += Math.min(t - (last || t), 100);
+  last = t;
+  while (acc >= STEP) { update(); acc -= STEP; }
+  draw();
+  requestAnimationFrame(loop);
+}
 
 addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (!e.repeat) flap(); } });
 cv.addEventListener('pointerdown', e => { e.preventDefault(); flap(); });
 
 reset();
-loop();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
